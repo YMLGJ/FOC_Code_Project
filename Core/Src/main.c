@@ -48,7 +48,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+static uint32_t g_last_tick = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -84,8 +84,23 @@ int main(void)
 
   /* Configure the system clock */
   SystemClock_Config();
-
   /* USER CODE BEGIN SysInit */
+
+    /* 使能 CRS 时钟 */
+  __HAL_RCC_CRS_CLK_ENABLE();
+
+  /* 配置 CRS：同步源 USB SOF，校准 HSI48 */
+  RCC_CRSInitTypeDef CRS_Init = {0};
+  CRS_Init.Prescaler             = RCC_CRS_SYNC_DIV1;
+  CRS_Init.Source                = RCC_CRS_SYNC_SOURCE_USB;
+  CRS_Init.Polarity              = RCC_CRS_SYNC_POLARITY_RISING;
+  CRS_Init.ReloadValue           = RCC_CRS_RELOADVALUE_DEFAULT;
+  CRS_Init.ErrorLimitValue       = RCC_CRS_ERRORLIMIT_DEFAULT;
+  CRS_Init.HSI48CalibrationValue = RCC_CRS_HSI48CALIBRATION_DEFAULT;
+  HAL_RCCEx_CRSConfig(&CRS_Init);
+
+  /* 启动 CRS 自动微调 */
+  SET_BIT(CRS->CR, CRS_CR_AUTOTRIMEN | CRS_CR_CEN);
 
   /* USER CODE END SysInit */
 
@@ -105,8 +120,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    Debug_Task();
-    HAL_Delay(1);
+    if (HAL_GetTick() - g_last_tick >= 500)
+    {
+        g_last_tick = HAL_GetTick();
+        HAL_GPIO_TogglePin(LED0_GPIO_Port, LED0_Pin);  // LED 0.5Hz 闪烁
+        Debug_Task();                                    // 同步上报
+    }
   }
   /* USER CODE END 3 */
 }

@@ -76,5 +76,5 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
     arm_cortexM4lf_math
 
-    # Add user defined libraries
+    # Add user defined libraries    rm -rf build/Debug
 )
