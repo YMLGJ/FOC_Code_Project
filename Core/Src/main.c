@@ -27,7 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "bsp.h"
 #include "debug.h"
-
+#include "foc.h" 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -125,6 +125,12 @@ int main(void)
         g_last_tick = HAL_GetTick();
         HAL_GPIO_TogglePin(LED0_GPIO_Port, LED0_Pin);  // LED 0.5Hz 闪烁
         Debug_Task();                                    // 同步上报
+        if (g_foc_event_flag & FOC_EVENT_RAMP_DONE)
+        {
+            g_foc_event_flag &= ~FOC_EVENT_RAMP_DONE;
+            printf("FOC: Ramp complete, running at %.1f Hz\r\n",
+                  FOC_GetHandle()->current_freq);
+        }
     }
   }
   /* USER CODE END 3 */

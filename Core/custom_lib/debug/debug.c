@@ -16,13 +16,14 @@ VOFA_Send_Handle_t VOFA_Handle = {
 void Debug_Task(void)
 {
     
-    VOFA_Handle.fdata[0] = 0;
-    VOFA_Handle.fdata[1] = 1;
-    VOFA_Handle.fdata[2] = 2;
-    VOFA_Handle.fdata[3] = 3;
+    //VOFA_Handle.fdata[0] = 0;
+    //VOFA_Handle.fdata[1] = 1;
+    //VOFA_Handle.fdata[2] = 2;
+    //VOFA_Handle.fdata[3] = 3;
 
-
+    __disable_irq();
     cdc_vcp_data_tx((uint8_t*)&VOFA_Handle, sizeof(VOFA_Handle));
+    __enable_irq();
 }
 
 

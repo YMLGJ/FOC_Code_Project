@@ -36,51 +36,51 @@ int __io_putchar(int ch)
 /*******************************************************/
 
 
-/***************************delay****************************/
-
+/* ======================== DWT 延时（不占用 SysTick） ======================== */
 
 /**
- * @brief     初始化延迟函数
- * @param     sysclk: 系统时钟频率, 即CPU频率(HCLK),等于系统时钟主频，单位MHz
- * @retval    无
- */  
-
-static uint32_t sys_us = 0;
-
-void delay_init(uint16_t sysclk)
+ * @brief  初始化 DWT 周期计数器用于延时
+ * @note   必须在 SystemClock_Config() 之后调用
+ *         不与 HAL 的 SysTick 冲突，无需中断
+ */
+void delay_init(void)
 {
-    uint32_t reload = sysclk*1000;                              /* 1ms触发一次中断 */
-    sys_us          = sysclk;
+    /* 使能 DWT 外设（由调试寄存器控制） */
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 
-    SysTick->CTRL   |= SysTick_CTRL_TICKINT_Msk;                /* 开启systick中断 */
-	SysTick->LOAD   = reload; 					                /* 装载值 */
-	SysTick->CTRL   |= SysTick_CTRL_ENABLE_Msk;                 /* 启动systick定时器 */
+    /* 清零并启动 DWT 周期计数器 */
+    DWT->CYCCNT = 0;
+    DWT->CTRL  |= DWT_CTRL_CYCCNTENA_Msk;
 }
 
+/**
+ * @brief  微秒级延时（基于 DWT 周期计数器）
+ * @param  us : 延时微秒数
+ * @note   最大延时受 uint32_t 限制：
+ *         170MHz 时约 25.3 秒，远大于实际需求
+ */
 void delay_us(uint32_t us)
 {
-    uint32_t ticks;
-	uint32_t told,tnow,tcnt=0;
-	uint32_t reload=SysTick->LOAD;				 	 
-	ticks=us*sys_us; 						    
-	told=SysTick->VAL;        				    
-	while(1)
-	{
-		tnow=SysTick->VAL;	
-		if(tnow!=told)
-		{	    
-			if(tnow<told)tcnt+=told-tnow;	
-			else tcnt+=reload-tnow+told;	    
- 			told=tnow;
-			if(tcnt>=ticks)break;			
-		}  
-	};
+    uint32_t start = DWT->CYCCNT;
+    uint32_t ticks = us * (SystemCoreClock / 1000000);
+
+    while ((DWT->CYCCNT - start) < ticks)
+    {
+        /* 空循环等待，利用 uint32_t 回卷特性自然处理溢出 */
+    }
 }
 
+/**
+ * @brief  毫秒级延时
+ * @param  ms : 延时毫秒数
+ */
 void delay_ms(uint32_t ms)
 {
     uint32_t i;
-	for(i=0;i<ms;i++) delay_us(1000);
+    for (i = 0; i < ms; i++)
+    {
+        delay_us(1000);
+    }
 }
 
 

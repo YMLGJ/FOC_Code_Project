@@ -20,8 +20,11 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32g4xx_it.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "foc.h"
+#include "debug.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,6 +54,39 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/**
+ * @brief  TIM 周期溢出回调（HAL 弱函数，在此重写）
+ * @note   由 HAL_TIM_IRQHandler 在检测到更新事件时自动调用
+ *         → 执行频率: 20kHz
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM1)
+    {
+        FOC_Handle_t *foc = FOC_GetHandle();
+
+        if (foc != NULL && foc->state != FOC_STATE_IDLE)
+        {
+            /* 强拖迭代：角度前进 → 逆Park → SVPWM → 更新PWM */
+            FOC_ForcedRotation_ISR(foc);
+
+            /* 每 200 次（100Hz）刷新一次 VOFA 调试数据 */
+            if ((foc->loop_count % 200) == 0)
+            {
+                extern VOFA_Send_Handle_t VOFA_Handle;
+                VOFA_Handle.fdata[0]  = foc->theta_elec;     /* 电角度          */
+                VOFA_Handle.fdata[1]  = foc->V_alpha;        /* Vα 电压指令     */
+                VOFA_Handle.fdata[2]  = foc->V_beta;         /* Vβ 电压指令     */
+                VOFA_Handle.fdata[3]  = foc->Ta;             /* A相占空比       */
+                VOFA_Handle.fdata[4]  = foc->Tb;             /* B相占空比       */
+                VOFA_Handle.fdata[5]  = foc->Tc;             /* C相占空比       */
+                VOFA_Handle.fdata[6]  = foc->current_freq;   /* 当前电频率      */
+                VOFA_Handle.fdata[7]  = foc->target_freq;    /* 目标电频率      */
+            }
+        }
+    }
+}
 
 /* USER CODE END 0 */
 
