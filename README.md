@@ -19,6 +19,7 @@
 - [项目结构 / Project Structure](#项目结构--project-structure)
 - [构建方法 / Build](#构建方法--build)
 - [功能状态 / Feature Status](#功能状态--feature-status)
+- [当前实现与限制 / Current Implementation](#当前实现与限制--current-implementation)
 - [学习路线 / Learning Roadmap](#学习路线--learning-roadmap)
 - [调试工具 / Debug Tools](#调试工具--debug-tools)
 - [Git 分支策略 / Branch Strategy](#git-分支策略--branch-strategy)
@@ -79,15 +80,15 @@ FOC_Code_Project/
 │   │   └── usart.h
 │   ├── Src/                    # HAL 外设源文件
 │   │   ├── main.c              # 主程序入口
-│   │   ├── stm32g4xx_it.c     # 中断服务函数
+│   │   ├── stm32g4xx_it.c     # 中断服务函数 (TIM1 20kHz FOC 回调)
 │   │   ├── tim.c               # TIM1 PWM 配置
 │   │   ├── gpio.c
 │   │   └── usart.c
 │   └── custom_lib/             # 🔧 自定义库 (手写代码)
 │       ├── bsp/                # 板级支持包 / Board Support Package
-│       ├── debug/              # 调试模块 (VOFA 协议)
+│       ├── debug/              # 调试模块 (VOFA 协议, 11通道/1kHz)
 │       ├── system_m4/          # 系统工具 (delay, soft reset, printf)
-│       └── foc/                # 🎯 FOC 算法核心 (待实现)
+│       └── foc/                # 🎯 FOC 算法核心 (强拖模式已实现)
 ├── Drivers/                    # STM32 HAL & CMSIS 库
 │   ├── CMSIS/
 │   └── STM32G4xx_HAL_Driver/
@@ -133,9 +134,9 @@ cmake --build build/Debug
 |----------------|---------------|---------------|
 | HAL 外设初始化 / HAL Peripheral Init | ✅ 完成 / Done | `main` |
 | USB CDC 虚拟串口 / Virtual COM Port | ✅ 完成 / Done | `main` |
-| VOFA+ 数据可视化 / Data Visualization | ✅ 完成 / Done | `main` |
+| VOFA+ 数据可视化 / Data Visualization | ✅ 完成 / Done (11ch @ 1kHz) | `main` |
 | TIM1 6路互补 PWM / 6-ch Complementary PWM | ✅ 完成 / Done | `main` |
-| SVPWM 开环驱动 / Open-loop Drive | 🔲 规划中 / Planned | `feature/01-svpwm` |
+| SVPWM 开环驱动 / Open-loop Drive | ✅ 完成（强拖）/ Done | `main` |
 | 电流采样 + Clarke/Park 变换 / Current Sampling | 🔲 规划中 / Planned | `feature/02-current-sampling` |
 | PI 电流环 / Current Loop PI | 🔲 规划中 / Planned | `feature/03-pid-current-loop` |
 | 速度环 + 双环级联 / Speed Loop Cascade | 🔲 规划中 / Planned | `feature/04-speed-loop` |
@@ -143,11 +144,29 @@ cmake --build build/Debug
 
 ---
 
+## 当前实现与限制 / Current Implementation
+
+### 已实现 / Implemented
+
+- **强拖 FOC**：`Vd=0, Vq=2.5V` 恒定电压矢量，电角度软件积分，频率 0→15Hz 斜坡启动（20Hz/s）
+- **SVPWM**：最小-最大零序注入法（等效七段式），20kHz 中心对齐 PWM，死区 ~235ns
+- **FOC 中断**：TIM1 更新中断 20kHz，强拖迭代在 `HAL_TIM_PeriodElapsedCallback` 中执行
+- **VOFA 调试**：11 通道 / 1kHz 采样率（USB CDC FireWater 协议），含电角度、Vαβ、三相占空比、三相正弦电压
+- **当前转速**：128.6 RPM @ 15Hz 电频率（极对数 7）
+
+### 已知限制 / Known Limitations
+
+- 强拖为**开环**，无位置/电流反馈，负载突变会失步，首次上板务必**限流电源 + 空载**
+- `FOC_POLE_PAIRS=7`、`FOC_VBUS_DEFAULT=12V` 需按实际电机确认
+- 三相理论电流基于 RL 稳态模型（未含反电动势），ADC 电流采样待接入（feature/02）
+
+---
+
 ## 学习路线 / Learning Roadmap
 
 ```mermaid
 graph LR
-    A[main<br/>项目骨架] --> B[feature/01-svpwm<br/>SVPWM 开环]
+    A[main<br/>项目骨架] --> B[✅ feature/01-svpwm<br/>SVPWM 强拖开环]
     B --> C[feature/02-current<br/>电流采样+坐标变换]
     C --> D[feature/03-pid<br/>电流环 PI]
     D --> E[feature/04-speed<br/>速度环 + 双环]
@@ -158,7 +177,7 @@ graph LR
 
 | 阶段 / Stage | 核心内容 / Core Content | 验证方式 / Verification |
 |--------------|------------------------|------------------------|
-| **01 - SVPWM** | 空间矢量调制、Clarke 逆变换、6 扇区计算 | 示波器观察 3 相 PWM 正弦包络 |
+| **01 - SVPWM** ✅ | 逆Park + 逆Clarke + 零序注入 SVPWM、频率斜坡强拖 | VOFA 观察三相正弦/马鞍波，电机开环旋转 |
 | **02 - Current** | ADC 注入采样、Clarke/Park 变换、电流重构 | VOFA 实时绘制 Id/Iq 波形 |
 | **03 - PI Loop** | PI 控制器离散化、参数整定、电流闭环 | Id=0 控制，电机平稳旋转 |
 | **04 - Speed** | 编码器测速、速度环 PI、双环级联 | 阶跃响应测试，转速跟踪 |
@@ -177,10 +196,22 @@ graph LR
 ```c
 // debug.h - 数据帧结构 / Data frame structure
 typedef struct {
-    float fdata[20];             // 20 通道浮点数据 / 20-channel float data
+    float fdata[11];             // 11 通道浮点数据 / 11-channel float data
     const unsigned char tail[4]; // 尾帧: {0x00, 0x00, 0x80, 0x7f}
 } VOFA_Send_Handle_t;
 ```
+
+**通道映射 / Channel Map:**
+
+| 通道 / Ch | 变量 / Variable | 含义 / Meaning |
+|-----------|-----------------|----------------|
+| 0 | `theta_elec` | 电角度 / Electrical angle [rad] |
+| 1 | `V_alpha` | α 轴电压 / α-axis voltage [V] |
+| 2 | `V_beta` | β 轴电压 / β-axis voltage [V] |
+| 3~5 | `Ta/Tb/Tc` | 三相占空比（马鞍波）/ 3-phase duty (saddle) |
+| 6 | `current_freq` | 当前电频率 / Current elec. freq [Hz] |
+| 7 | `target_freq` | 目标电频率 / Target elec. freq [Hz] |
+| 8~10 | `Va/Vb/Vc_sin` | 三相正弦电压（零序注入前）/ 3-phase sine voltage |
 
 **使用步骤 / Usage:**
 1. 用 USB 连接开发板到 PC / Connect board to PC via USB
@@ -201,7 +232,7 @@ printf("Hello from STM32G473!\r\n");  // 输出到 PB6 (TX)
 
 ```
 main                     ← 稳定版本 / Stable releases
-├── feature/01-svpwm     ← SVPWM 开环
+├── feature/01-svpwm     ← SVPWM 开环 (✅ 已并入 main)
 ├── feature/02-current   ← 电流采样
 ├── feature/03-pid       ← 电流环 PI
 ├── feature/04-speed     ← 速度环
@@ -222,7 +253,7 @@ docs(readme): update build instructions
 
 | Tag | 里程碑 / Milestone |
 |-----|-------------------|
-| `v0.1-svpwm` | SVPWM 开环验证通过 |
+| `v0.1-svpwm` | ✅ SVPWM 开环验证通过（强拖模式已实现） |
 | `v0.2-current` | 电流采样 + 坐标变换 |
 | `v0.3-current-loop` | 电流环 PI 闭环 |
 | `v0.4-dual-loop` | 速度+电流双环 |
@@ -243,7 +274,3 @@ STM32 HAL/CMSIS 驱动代码版权归 STMicroelectronics 所有。
 ---
 
 *Made with ❤️ for FOC learning | 为 FOC 学习而生*
-git add README.md
-git commit -m "docs: add bilingual README with project overview and roadmap"
-git push
-```
