@@ -34,18 +34,18 @@ void FOC_Init(FOC_Handle_t *foc)
     memset(foc, 0, sizeof(FOC_Handle_t));
 
     /* 硬件参数 */
-    foc->pwm_period   = FOC_PWM_PERIOD;
-    foc->pwm_period_f = (float)FOC_PWM_PERIOD;
-    foc->Vbus         = FOC_VBUS_DEFAULT;
-    foc->pole_pairs   = FOC_POLE_PAIRS;
+    foc->pwm_period   = FOC_PWM_PERIOD;// 4249
+    foc->pwm_period_f = (float)FOC_PWM_PERIOD;// 4249.0f
+    foc->Vbus         = FOC_VBUS_DEFAULT;// 24.0f
+    foc->pole_pairs   = FOC_POLE_PAIRS;// 7
 
     /* 默认强拖参数 */
     foc->state            = FOC_STATE_IDLE;
-    foc->target_freq      = 0.0f;
-    foc->current_freq     = 0.0f;
-    foc->ramp_rate        = 20.0f;     /* 默认 20 Hz/s 斜坡 */
-    foc->voltage_setting  = 2.0f;      /* 默认 2V，很保守   */
-    foc->voltage_min      = 0.5f;      /* 最低 0.5V 启动    */
+    foc->target_freq      = 0.0f;       // 目标频率
+    foc->current_freq     = 0.0f;       // 当前频率
+    foc->ramp_rate        = 20.0f;      // 斜坡速率 Hz/s  
+    foc->voltage_setting  = 2.0f;       // 电压幅值 V
+    foc->voltage_min      = 0.5f;       // 电压最小值 V
     foc->voltage_max      = foc->Vbus * 0.8f;  /* 限制 80% Vbus */
 
 
@@ -61,27 +61,27 @@ void FOC_Init(FOC_Handle_t *foc)
 /* ================================================================== */
 void FOC_StartForcedRotation(FOC_Handle_t *foc,
                              float target_freq_hz,
-                             float voltage_v)
+                             float voltage_v)   
 {
-    if (foc == NULL) return;
+    if (foc == NULL) return;        /* 空指针检查 */
 
     /* 参数合理性检查 */
-    if (target_freq_hz < 0.5f)  target_freq_hz = 0.5f;
-    if (target_freq_hz > 200.0f) target_freq_hz = 200.0f;
+    if (target_freq_hz < 0.5f)  target_freq_hz = 0.5f;      // 最低 0.5Hz
+    if (target_freq_hz > 200.0f) target_freq_hz = 200.0f;       // 最高 200Hz
 
-    if (voltage_v < foc->voltage_min) voltage_v = foc->voltage_min;
-    if (voltage_v > foc->voltage_max) voltage_v = foc->voltage_max;
+    if (voltage_v < foc->voltage_min) voltage_v = foc->voltage_min;     // 最低 0.5V
+    if (voltage_v > foc->voltage_max) voltage_v = foc->voltage_max;     // 最高 80% Vbus
 
-    foc->target_freq     = target_freq_hz;
-    foc->voltage_setting = voltage_v;
-    foc->current_freq    = 0.0f;
-    foc->theta_elec      = 0.0f;
-    foc->loop_count      = 0;
+    foc->target_freq     = target_freq_hz;      // 目标频率
+    foc->voltage_setting = voltage_v;       // 电压幅值
+    foc->current_freq    = 0.0f;        // 当前频率
+    foc->theta_elec      = 0.0f;       // 电角度
+    foc->loop_count      = 0;          // 计数器清零
 
-    foc->state = FOC_STATE_RAMPING;
+    foc->state = FOC_STATE_RAMPING;     // 进入斜坡上升状态
 
-    printf("FOC_Start: Target=%.1fHz, Voltage=%.2fV\r\n",
-           target_freq_hz, voltage_v);
+    printf("FOC_Start: Target=%.1fHz, Voltage=%.2fV\r\n", 
+           target_freq_hz, voltage_v);      // 打印启动信息
 }
 
 /* ================================================================== */
@@ -91,8 +91,8 @@ void FOC_Stop(FOC_Handle_t *foc)
 {
     if (foc == NULL) return;
 
-    foc->state        = FOC_STATE_IDLE;
-    foc->target_freq  = 0.0f;
+    foc->state        = FOC_STATE_IDLE;     // 停止状态
+    foc->target_freq  = 0.0f;       // 目标频率
     foc->current_freq = 0.0f;
     foc->theta_elec   = 0.0f;
     foc->Vd           = 0.0f;
@@ -116,11 +116,11 @@ void FOC_Stop(FOC_Handle_t *foc)
 /* ================================================================== */
 static void FOC_InvPark(FOC_Handle_t *foc)
 {
-    float cos_theta = arm_cos_f32(foc->theta_elec);
-    float sin_theta = arm_sin_f32(foc->theta_elec);
+    float cos_theta = arm_cos_f32(foc->theta_elec);      // 计算电角度的余弦
+    float sin_theta = arm_sin_f32(foc->theta_elec);     // 计算电角度的正弦
 
-    foc->V_alpha = foc->Vd * cos_theta - foc->Vq * sin_theta;
-    foc->V_beta  = foc->Vd * sin_theta + foc->Vq * cos_theta;
+    foc->V_alpha = foc->Vd * cos_theta - foc->Vq * sin_theta;       // 计算 α 轴电压
+    foc->V_beta  = foc->Vd * sin_theta + foc->Vq * cos_theta;       // 计算 β 轴电压
 }
 
 /* ================================================================== */
@@ -148,6 +148,11 @@ static void FOC_SVPWM(FOC_Handle_t *foc)
 
     /* 1. αβ → 三相正弦电压 */
     FOC_InvClarke(foc->V_alpha, foc->V_beta, &Va, &Vb, &Vc);
+
+    /* 1.5 保存零序注入前的三相正弦电压（供 VOFA 调试对比） */
+    foc->Va_sin = Va;            /* 在注入零序之前保存 */
+    foc->Vb_sin = Vb;
+    foc->Vc_sin = Vc;
 
     /* 2. 计算零序注入分量 = (Vmax + Vmin) / 2
      *    这是 SVPWM 与 SPWM 的唯一区别 —— 一行代码带来 15% 电压裕量 */

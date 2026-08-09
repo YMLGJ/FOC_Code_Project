@@ -60,6 +60,7 @@ typedef struct
 
     /* ---- SVPWM 输出 ---- */
     float    Ta, Tb, Tc;        /* 三相占空比 [0, 1]               */
+    float    Va_sin, Vb_sin, Vc_sin;  /* 零序注入前的三相正弦电压 [V] */
     uint16_t CCR1, CCR2, CCR3;  /* TIM1 比较寄存器值               */
 
     /* ---- 开环强拖参数 ---- */

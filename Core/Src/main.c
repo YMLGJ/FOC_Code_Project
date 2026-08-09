@@ -120,7 +120,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (HAL_GetTick() - g_last_tick >= 500)
+    if (HAL_GetTick() - g_last_tick >= 2)
     {
         g_last_tick = HAL_GetTick();
         HAL_GPIO_TogglePin(LED0_GPIO_Port, LED0_Pin);  // LED 0.5Hz 闪烁

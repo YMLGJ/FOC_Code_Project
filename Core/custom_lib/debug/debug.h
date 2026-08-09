@@ -3,7 +3,7 @@
 
 
 /*vofa的通道数量*/
-#define VOFA_CH_COUNT               20
+#define VOFA_CH_COUNT               11
 
 #define VOFA_RECV_CH_COUNT               4
 

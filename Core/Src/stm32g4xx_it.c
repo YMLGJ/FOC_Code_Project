@@ -71,19 +71,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             /* 强拖迭代：角度前进 → 逆Park → SVPWM → 更新PWM */
             FOC_ForcedRotation_ISR(foc);
 
-            /* 每 200 次（100Hz）刷新一次 VOFA 调试数据 */
-            if ((foc->loop_count % 200) == 0)
-            {
-                extern VOFA_Send_Handle_t VOFA_Handle;
-                VOFA_Handle.fdata[0]  = foc->theta_elec;     /* 电角度          */
-                VOFA_Handle.fdata[1]  = foc->V_alpha;        /* Vα 电压指令     */
-                VOFA_Handle.fdata[2]  = foc->V_beta;         /* Vβ 电压指令     */
-                VOFA_Handle.fdata[3]  = foc->Ta;             /* A相占空比       */
-                VOFA_Handle.fdata[4]  = foc->Tb;             /* B相占空比       */
-                VOFA_Handle.fdata[5]  = foc->Tc;             /* C相占空比       */
-                VOFA_Handle.fdata[6]  = foc->current_freq;   /* 当前电频率      */
-                VOFA_Handle.fdata[7]  = foc->target_freq;    /* 目标电频率      */
-            }
+
+            extern VOFA_Send_Handle_t VOFA_Handle;
+            VOFA_Handle.fdata[0]  = foc->theta_elec;     /* 电角度          */
+            VOFA_Handle.fdata[1]  = foc->V_alpha;        /* Vα 电压指令     */
+            VOFA_Handle.fdata[2]  = foc->V_beta;         /* Vβ 电压指令     */
+            VOFA_Handle.fdata[3]  = foc->Ta;             /* A相占空比       */
+            VOFA_Handle.fdata[4]  = foc->Tb;             /* B相占空比       */
+            VOFA_Handle.fdata[5]  = foc->Tc;             /* C相占空比       */
+            VOFA_Handle.fdata[6]  = foc->current_freq;   /* 当前电频率      */
+            VOFA_Handle.fdata[7]  = foc->target_freq;    /* 目标电频率      */
+            VOFA_Handle.fdata[8] = foc->Va_sin;          /* A相正弦电压(注入前) */
+            VOFA_Handle.fdata[9] = foc->Vb_sin;          /* B相正弦电压(注入前) */
+            VOFA_Handle.fdata[10] = foc->Vc_sin;          /* C相正弦电压(注入前) */
+            
         }
     }
 }
