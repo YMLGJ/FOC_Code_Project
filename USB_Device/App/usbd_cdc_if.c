@@ -373,6 +373,18 @@ void cdc_vcp_data_rx(uint8_t *buf, uint32_t Len)
  */
 void cdc_vcp_data_tx(uint8_t *data, uint32_t Len)
 {
+    USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+
+    /* USB 未枚举/上一帧未发完时直接丢弃，避免空指针和覆盖缓冲 */
+    if (hcdc == NULL || hcdc->TxState != 0U)
+    {
+        return;
+    }
+    if (hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED)
+    {
+        return;
+    }
+
     USBD_CDC_SetTxBuffer(&hUsbDeviceFS, data, Len);
     USBD_CDC_TransmitPacket(&hUsbDeviceFS);
 }

@@ -68,6 +68,9 @@ void SystemClock_Config(void);
   */
 int main(void)
 {
+  /* 第一件事：记录是什么把板子打回复位的（上电/欠压BOR/软件/看门狗）。
+     必须在 HAL_Init 之前，否则标志可能已经被清掉。 */
+  BSP_RecordResetCause();
 
   /* USER CODE BEGIN 1 */
 
@@ -79,7 +82,11 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  /* 默认总线/存储器/用法故障是不上报的，会被静默升级成 HardFault，
+     丢掉 CFSR 细节。打开后可以知道到底是除零、非对齐访问还是野指针。 */
+  SCB->SHCSR |= SCB_SHCSR_USGFAULTENA_Msk
+              | SCB_SHCSR_BUSFAULTENA_Msk
+              | SCB_SHCSR_MEMFAULTENA_Msk;
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -110,6 +117,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USB_Device_Init();
   /* USER CODE BEGIN 2 */
+  stack_paint();       /* 必须在所有深调用之前：涂满空闲栈区，用于测栈用量 */
   BSP_Init();
   /* USER CODE END 2 */
 
@@ -120,16 +128,26 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (HAL_GetTick() - g_last_tick >= 2)
+    static uint32_t s_led_tick = 0U;
+
+    /* 心跳灯：250 ms 翻转一次 ≈ 2 Hz，肉眼可见。
+     * 这是不依赖 USB 的存活指示：USB 掉了但灯还在闪 → MCU 活着；
+     * 灯不闪了 → MCU 死机/复位循环。别再把 LED 当 2ms 流水灯用。 */
+    if ((HAL_GetTick() - s_led_tick) >= 250U)
+    {
+        s_led_tick = HAL_GetTick();
+        HAL_GPIO_TogglePin(LED0_GPIO_Port, LED0_Pin);
+    }
+
+    if ((HAL_GetTick() - g_last_tick) >= 2U)
     {
         g_last_tick = HAL_GetTick();
-        HAL_GPIO_TogglePin(LED0_GPIO_Port, LED0_Pin);  // LED 0.5Hz 闪烁
-        Debug_Task();                                    // 同步上报
+        Debug_Task();                                    // 同步上报 VOFA + 收命令
         if (g_foc_event_flag & FOC_EVENT_RAMP_DONE)
         {
             g_foc_event_flag &= ~FOC_EVENT_RAMP_DONE;
-            printf("FOC: Ramp complete, running at %.1f Hz\r\n",
-                  FOC_GetHandle()->current_freq);
+            printf("FOC: Ramp complete, %dHz\r\n",
+                  (int)FOC_GetHandle()->current_freq);
         }
     }
   }

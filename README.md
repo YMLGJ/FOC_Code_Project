@@ -15,6 +15,7 @@
 ## 📋 目录 / Table of Contents
 
 - [项目简介 / Overview](#项目简介--overview)
+- [**当前状态 / Current Status**](#-当前状态--current-status)
 - [硬件平台 / Hardware](#硬件平台--hardware)
 - [项目结构 / Project Structure](#项目结构--project-structure)
 - [构建方法 / Build](#构建方法--build)
@@ -24,6 +25,40 @@
 - [调试工具 / Debug Tools](#调试工具--debug-tools)
 - [Git 分支策略 / Branch Strategy](#git-分支策略--branch-strategy)
 - [许可证 / License](#许可证--license)
+
+---
+
+## 📌 当前状态 / Current Status
+
+> **详细文档：**
+> - 📄 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) —— 已实测的硬件参数、完整命令手册、`STATUS`/`DIAG` 字段解码、环境陷阱
+> - 📄 [`docs/DEBUG_LOG.md`](docs/DEBUG_LOG.md) —— 12 个真实缺陷的完整根因与定位方法
+
+**已验证可用：**
+
+| 功能 | 状态 | 实测 |
+|---|---|---|
+| PWM 20 kHz + 死区补偿 | ✅ | — |
+| ADC/DMA 与 PWM 同步采样 | ✅ | 零漂 2081±15 |
+| 电流环 PI | ✅ | `Iq` 跟踪 2000 mA，误差 <2% |
+| I/f 开环运行（20~50 Hz） | ✅ | 稳定 |
+| 反电势过零测速 `emfHz` | ✅ | 与指令频率吻合 |
+| 观测器 PLL（带频率前馈） | ✅ | `ω̂` 误差 <3% |
+| 手动无感切换 `SMO 1` | ✅ | 运行至 158 Hz，无过流 |
+| 自动切换 I/f → 无感 | ❌ | 卡在 `dth` 门槛 |
+| 速度环 | ❌ | 未实现 |
+
+**快速上手：**
+
+```
+TXT 1              ← 切到文本模式（printf 走 USB）
+STATUS             ← 看完整状态
+CAL                ← 重采电流零漂（上电顺序反了用它）
+RAMP 1             ← 升速斜率 1 Hz/s
+START 2 50         ← 2 A，50 Hz 电频率
+SMO 1              ← 手动切到无感闭环
+STOP
+```
 
 ---
 
@@ -56,7 +91,8 @@
 | **USB (CDC)** | USB 虚拟串口 / Virtual COM Port | PA11 (DM), PA12 (DP) |
 | **GPIO** | LED 指示灯 / LED Indicator | PA4 |
 | **HSE** | 外部高速晶振 / External Crystal | 25 MHz |
-| **ADC1/2** | 电流采样 / Current Sampling | 🔲 待配置 / Pending |
+| **ADC1/2** | 电流采样 / Current Sampling | PB0=IU(ADC1_IN15), PA5=IV(ADC2_IN13)；TIM1_TRGO 同步触发 |
+| **电流传感器** | Current Sensor | CC6920SO-20A，100 mV/A，1k/2k 分压 |
 
 ---
 

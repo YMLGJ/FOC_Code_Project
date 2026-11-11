@@ -1,5 +1,96 @@
 #include "sys_m4.h"
+#include "debug.h"
 #include <stdio.h>
+
+/* ===================== 栈用量监测 ===================== */
+
+#define STACK_PATTERN     0x5A5A5A5AU
+#define STACK_SCAN_BYTES  8192U
+
+/* 由链接脚本提供：栈顶、栈大小 */
+extern uint32_t _estack;
+extern uint32_t _Min_Stack_Size;
+
+/* 监测窗口：栈顶往下 8KB。栈是从栈顶往下长的，所以只能看这里，
+ * 从栈底（_sstack）往上扫是看不到实际用量的。 */
+static uint32_t *stack_win_base(void)
+{
+    return (uint32_t *)((uint32_t)&_estack - STACK_SCAN_BYTES);
+}
+
+uint32_t stack_total_bytes(void)
+{
+    return STACK_SCAN_BYTES;
+}
+
+void stack_paint(void)
+{
+    uint32_t *p = stack_win_base();
+    uint32_t *sp;
+
+    __asm volatile ("mov %0, sp" : "=r"(sp));
+
+    /* 只涂当前 SP 以下（尚未被使用）的部分，留 128 字（512B）余量 */
+    while (p < (sp - 128))
+    {
+        *p++ = STACK_PATTERN;
+    }
+}
+
+uint32_t stack_used_bytes(void)
+{
+    const uint32_t *p     = stack_win_base();
+    const uint32_t  words = STACK_SCAN_BYTES / 4U;
+    uint32_t        i     = 0U;
+
+    while ((i < words) && (p[i] == STACK_PATTERN))
+    {
+        i++;
+    }
+
+    return STACK_SCAN_BYTES - (i * 4U);
+}
+
+/* 缓存版：只在 Debug_Task（500Hz）里刷新，中断里只读全局量 */
+volatile uint32_t g_stack_used = 0U;
+volatile uint32_t g_stack_free = 0U;
+
+void stack_update(void)
+{
+    const uint32_t used  = stack_used_bytes();
+    const uint32_t total = stack_total_bytes();
+
+    g_stack_used = used;
+    g_stack_free = (used < total) ? (total - used) : 0U;
+}
+
+/* ===================== 复位原因记录 ===================== */
+
+#define RESET_MAGIC   0x52535443U      /* 'RSTC' */
+
+__attribute__((section(".noinit"), used))
+volatile uint32_t g_reset_rec[2];      /* [0]=magic [1]=count */
+
+volatile uint32_t g_reset_cause = 0U;
+volatile uint32_t g_reset_count = 0U;
+
+void BSP_RecordResetCause(void)
+{
+    const uint32_t csr = RCC->CSR;
+
+    if (g_reset_rec[0] != RESET_MAGIC)
+    {
+        g_reset_rec[0] = RESET_MAGIC;
+        g_reset_rec[1] = 0U;
+    }
+
+    g_reset_rec[1] += 1U;
+
+    g_reset_cause = csr;
+    g_reset_count = g_reset_rec[1];
+
+    __HAL_RCC_CLEAR_RESET_FLAGS();      /* 清标志，下次只反映新的复位 */
+}
 
 
 void soft_reset(void)
@@ -22,6 +113,7 @@ void soft_reset(void)
 
 int fputc(int ch, FILE *f)
 {
+    if (g_txt_mode != 0U) { dbg_putchar(ch); return ch; }   /* TXT 模式走 USB */
     while ((USART1->ISR & 0X40) == 0);              
     USART1->TDR = (uint8_t)ch;
     return ch;
@@ -29,6 +121,9 @@ int fputc(int ch, FILE *f)
 
 int __io_putchar(int ch)
 {
+    /* printf 默认走 USART1(PB6)，用 USB 是看不到的。
+       发过 TXT 1 之后就改走 USB CDC，用串口助手能直接看文本。 */
+    if (g_txt_mode != 0U) { dbg_putchar(ch); return ch; }
     while ((USART1->ISR & 0X40) == 0);
     USART1->TDR = (uint8_t)ch;
     return ch;

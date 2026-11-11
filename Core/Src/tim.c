@@ -45,9 +45,9 @@ void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
-  htim1.Init.Period = 4249;
+  htim1.Init.Period = 4248;             /* 20kHz 中心对齐：170e6/(2*4249) */
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.RepetitionCounter = 1;     /* 每 2 个计数周期产生一次更新中断 */
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
   {
@@ -62,7 +62,9 @@ void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC4REF;
+  /* TRGO 改为更新事件：ADC1/ADC2 用它做同步触发源，
+     每个 PWM 周期在计数器过零/峰值（零矢量、开关动作最少）采样一次。 */
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
@@ -70,7 +72,7 @@ void MX_TIM1_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM2;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 2124;               /* 50% 占空比（ARR=4248 的一半） */
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -114,6 +116,10 @@ void MX_TIM1_Init(void)
 
   TIM1->CCER |= (TIM_CCER_CC2NE | TIM_CCER_CC3NE);
 
+  /* 先把 6 路 PWM 引脚配成复用推挽，再启动输出。
+     原来放在函数末尾，等于"先开输出、后配引脚"，启动瞬间引脚还没切到 AF。 */
+  HAL_TIM_MspPostInit(&htim1);
+
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -123,8 +129,6 @@ void MX_TIM1_Init(void)
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
 
   /* USER CODE END TIM1_Init 2 */
-  HAL_TIM_MspPostInit(&htim1);
-
 }
 
 void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)

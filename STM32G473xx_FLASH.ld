@@ -64,7 +64,9 @@ _estack = ORIGIN(RAM) + LENGTH(RAM);    /* end of RAM */
 _sstack = _estack - _Min_Stack_Size;
 /* Generate a link error if heap and stack don't fit into RAM */
 _Min_Heap_Size = 0x00;      /* required amount of heap  */
-_Min_Stack_Size = 0x400; /* required amount of stack */
+/* 原来只有 0x400（1KB），但 printf 的 %f 格式化 + 40kHz FOC 中断（含观测器）
+ * 叠加后会溢出，导致 START 时 HardFault 复位。RAM 只用了 8KB/128KB，给足 4KB。 */
+_Min_Stack_Size = 0x1000; /* required amount of stack */
 
 /* Define output sections */
 SECTIONS
@@ -226,6 +228,15 @@ SECTIONS
   PROVIDE( __bss_start = __tbss_start );
   PROVIDE( __bss_size = __bss_end - __bss_start );
 
+  /* 复位后必须保留的变量（HardFault 记录、复位计数）。
+     启动代码只清零 __bss_start__..__bss_end__，本段在 .bss 之后，不受影响。 */
+  .noinit (NOLOAD) : ALIGN(4)
+  {
+    *(.noinit)
+    *(.noinit*)
+    . = ALIGN(4);
+  } >RAM
+
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack (NOLOAD) :
   {
@@ -233,6 +244,7 @@ SECTIONS
     PROVIDE ( end = . );
     PROVIDE ( _end = . );
     . = . + _Min_Heap_Size;
+    PROVIDE ( _sstack = . );   /* 栈底：用来算"栈还剩多少" */
     . = . + _Min_Stack_Size;
     . = ALIGN(8);
   } >RAM
